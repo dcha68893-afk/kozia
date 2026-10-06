@@ -21,6 +21,7 @@ export const config = {
   redisUrl: process.env.REDIS_URL ?? '',
   requireRedis: bool('REQUIRE_REDIS', env === 'production'),
   antiCheatWindowMs: num('ANTI_CHEAT_WINDOW_MS', 80),
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
   corsOrigins: (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean),
   bannedWords: (process.env.BANNED_WORDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   allowSoloRooms: bool('ALLOW_SOLO_ROOMS'),
