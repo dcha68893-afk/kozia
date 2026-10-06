@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(20) NOT NULL,
   email VARCHAR(255) NOT NULL,
   password_hash TEXT NOT NULL,
+  google_subject TEXT UNIQUE,
   coins BIGINT NOT NULL DEFAULT 500 CHECK (coins >= 0),
   gems BIGINT NOT NULL DEFAULT 0 CHECK (gems >= 0),
   tickets INT NOT NULL DEFAULT 3 CHECK (tickets >= 0),
