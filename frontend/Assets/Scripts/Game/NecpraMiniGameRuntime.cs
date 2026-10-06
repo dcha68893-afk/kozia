@@ -10,6 +10,11 @@ public class NecpraMiniGameRuntime : MonoBehaviour
     public enum Mode { None, WaterSort, BlockPuzzle, Reaction, Memory }
     public Mode mode = Mode.None;
     public bool Opened => mode != Mode.None;
+    string onlineMatchId = "";
+    int onlineScore;
+    public void SetOnline(string matchId) { onlineMatchId = matchId ?? ""; onlineScore = 0; }
+    public void ClearOnline() { onlineMatchId = ""; onlineScore = 0; }
+    void SendOnline(string action, object payload) { if (!string.IsNullOrEmpty(onlineMatchId) && WsClient.I != null) WsClient.I.Send("game.match.action", new { action, payload }); }
 
     readonly System.Random rng = new System.Random();
     int score, moves, best;
@@ -99,7 +104,7 @@ public class NecpraMiniGameRuntime : MonoBehaviour
         for (int i=from.Count-2;i>=0 && from[i]==color;i--) run++;
         int amount = Mathf.Min(run, 4-to.Count);
         for (int i=0;i<amount;i++) { from.RemoveAt(from.Count-1); to.Add(color); }
-        moves++; score += amount * 10; selectedTube = -1;
+        moves++; score += amount * 10; selectedTube = -1; SendOnline("water.move", new { from = sourceIndex, to = index, amount });
         if (WaterSolved()) status = "Solved! +" + score + " points";
     }
 
@@ -134,7 +139,7 @@ public class NecpraMiniGameRuntime : MonoBehaviour
         int cleared=0;
         for(int y=0;y<8;y++){bool full=true;for(int x=0;x<8;x++)if(!board[x,y]){full=false;break;}if(full){for(int x=0;x<8;x++)board[x,y]=false;cleared++;}}
         for(int x=0;x<8;x++){bool full=true;for(int y=0;y<8;y++)if(!board[x,y]){full=false;break;}if(full){for(int y=0;y<8;y++)board[x,y]=false;cleared++;}}
-        score += cleared*100;
+        score += cleared*100; SendOnline("block.place", new { x = ox, y = oy, size = block.Count });
         SpawnBlock();
         status = cleared > 0 ? "Great! Cleared " + cleared + " line(s)." : "Shape placed.";
     }
@@ -155,7 +160,7 @@ public class NecpraMiniGameRuntime : MonoBehaviour
     void MemoryTap(int i)
     {
         if (revealed.Contains(i) || Time.time < hideAt) return;
-        revealed.Add(i);
+        revealed.Add(i); SendOnline("memory.flip", new { index = i });
         if (firstCard < 0) { firstCard=i; return; }
         moves++;
         if (memory[firstCard] == memory[i]) { matched++; score += 100; firstCard=-1; }
@@ -183,7 +188,7 @@ public class NecpraMiniGameRuntime : MonoBehaviour
         GUILayout.FlexibleSpace();
         if(GUILayout.Button("EXIT",GUILayout.Width(70))) Close();
         GUILayout.EndHorizontal();
-        GUILayout.Label("Score "+score+"   Moves "+moves+"   "+status);
+        GUILayout.Label("Score "+score+"   Server score "+onlineScore+"   Moves "+moves+"   "+status);
         scroll=GUILayout.BeginScrollView(scroll);
         if(mode==Mode.WaterSort) DrawWater();
         else if(mode==Mode.BlockPuzzle) DrawBlock();
@@ -222,8 +227,8 @@ public class NecpraMiniGameRuntime : MonoBehaviour
         GUILayout.Label(reactionReady ? "GO!" : "Do not click until GO appears.");
         if(!reactionFinished && GUILayout.Button(reactionReady?"CLICK!":"WAIT",GUILayout.Height(180)))
         {
-            if(!reactionReady){status="Too early!"; reactionFinished=true; score=0;}
-            else {float ms=(Time.time-reactionAt)*1000f; score=Mathf.Max(1,Mathf.RoundToInt(1000-ms)); status="Reaction: "+ms.ToString("0")+" ms"; reactionFinished=true;}
+            if(!reactionReady){status="Too early!"; reactionFinished=true; score=0; SendOnline("reaction.early", new { });}
+            else {float ms=(Time.time-reactionAt)*1000f; score=Mathf.Max(1,Mathf.RoundToInt(1000-ms)); status="Reaction: "+ms.ToString("0")+" ms"; reactionFinished=true; SendOnline("reaction.click", new { });}
         }
         if(reactionFinished && GUILayout.Button("PLAY AGAIN",GUILayout.Height(40))) Reset();
     }
