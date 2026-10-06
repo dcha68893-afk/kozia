@@ -155,10 +155,15 @@ function addNpc(x,y,z,role,color){
 }
 function addLabel(text,x,y,z){const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#dff6ff';ctx.font='bold 46px Arial';ctx.textAlign='center';ctx.fillText(text,256,72);const tex=new THREE.CanvasTexture(c);const m=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));m.position.set(x,y,z);m.scale.set(16,4,1);scene.add(m);}
 function makeAvatar(color,local=false){
-  const g=new THREE.Group(); const mat=new THREE.MeshStandardMaterial({color,roughness:.7});
-  const body=new THREE.Mesh(new THREE.CapsuleGeometry(.55,1.15,6,12),mat);body.position.y=1.25;body.castShadow=true;g.add(body);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(.48,16,12),new THREE.MeshStandardMaterial({color:0xf0b58c,roughness:.8}));head.position.y=2.3;head.castShadow=true;g.add(head);
-  const legMat=new THREE.MeshStandardMaterial({color:0x182238}); for(const x of[-.23,.23]){const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.17,.85,5,8),legMat);leg.position.set(x,.48,0);leg.castShadow=true;g.add(leg);}
+  const g=new THREE.Group();
+  const mat=new THREE.MeshStandardMaterial({color,roughness:.7});
+  const skin=new THREE.MeshStandardMaterial({color:0xf0b58c,roughness:.8});
+  const dark=new THREE.MeshStandardMaterial({color:0x182238,roughness:.7});
+  const body=new THREE.Mesh(new THREE.CapsuleGeometry(.55,1.15,6,12),mat); body.position.y=1.25; body.castShadow=true; g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.48,16,12),skin); head.position.y=2.3; head.castShadow=true; g.add(head);
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(.50,16,8,0,Math.PI*2,0,Math.PI*.45),new THREE.MeshStandardMaterial({color:0x24180f,roughness:.9})); hair.position.y=2.48; hair.castShadow=true; g.add(hair);
+  for(const x of[-.23,.23]){const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.17,.85,5,8),dark);leg.position.set(x,.48,0);leg.castShadow=true;g.add(leg);}
+  for(const x of[-.68,.68]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.13,.72,5,8),skin);arm.position.set(x,1.35,0);arm.rotation.z=x<0?-0.12:0.12;arm.castShadow=true;g.add(arm);}
   if(local){const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.035,8,32),new THREE.MeshBasicMaterial({color:0x5be7ff}));ring.rotation.x=Math.PI/2;ring.position.y=.05;g.add(ring);}
   return g;
 }
