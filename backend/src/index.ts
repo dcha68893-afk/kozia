@@ -8,6 +8,7 @@ import { migrate } from './db/migrate';
 import { pool } from './db/pool';
 import { errorMiddleware } from './errors';
 import { attachWebSocket } from './realtime/ws';
+import { pingRedis, closeRedis } from './realtime/redisState';
 import { authRouter } from './routes/auth';
 import { economyRouter } from './routes/economy';
 import { leaderboardRouter } from './routes/leaderboard';
@@ -39,8 +40,11 @@ async function main() {
   });
 
   app.get('/ready', async (_req, res) => {
-    try { await pool.query('SELECT 1'); res.json({ ready: true }); }
-    catch { res.status(503).json({ ready: false }); }
+    try {
+      await pool.query('SELECT 1');
+      if (config.requireRedis && !(await pingRedis())) return res.status(503).json({ ready: false, reason: 'redis' });
+      res.json({ ready: true });
+    } catch { res.status(503).json({ ready: false }); }
   });
 
   app.use('/api', rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: true, legacyHeaders: false }));
@@ -67,7 +71,7 @@ async function main() {
 
   const shutdown = () => {
     clearInterval(sched);
-    server.close(() => pool.end().then(() => process.exit(0)));
+    server.close(() => pool.end().then(() => closeRedis()).then(() => process.exit(0)));
     setTimeout(() => process.exit(0), 5000).unref();
   };
   process.on('SIGTERM', shutdown);

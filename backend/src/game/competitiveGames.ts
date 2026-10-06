@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { config } from '../config';
 
 export type CompetitiveKind='trivers'|'crossword'|'chess'|'racing'|'team-strategy';
 export interface PlayerGameState { score:number; done:boolean; strikes:number; lastActionAt:number; seq:number; data:any; }
@@ -25,7 +26,7 @@ function chessLegal(b:any[][],from:[number,number],to:[number,number],white:bool
  if(t==='b'||t==='r'||t==='q'){if(t==='b'&&Math.abs(dx)!==Math.abs(dy))return false;if(t==='r'&&dx!==0&&dy!==0)return false;const sx=Math.sign(dx),sy=Math.sign(dy);let cx=x+sx,cy=y+sy;while(cx!==tx||cy!==ty){if(b[cx][cy])return false;cx+=sx;cy+=sy;}return true;} return false;
 }
 export function applyCompetitiveAction(s:EngineState,userId:string,action:string,payload:any){
- const p=s.players[userId];if(!p)throw new Error('Not in game');const now=Date.now();if(now-p.lastActionAt<80)throw new Error('Actions too fast');p.lastActionAt=now;p.seq++;
+ const p=s.players[userId];if(!p)throw new Error('Not in game');const now=Date.now();if(now-p.lastActionAt<config.antiCheatWindowMs)throw new Error('Actions too fast');p.lastActionAt=now;p.seq++;
  if(action==='trivers.answer'){if(s.kind!=='trivers')throw new Error('Wrong game');const n=Number(payload?.answer);if(!Number.isInteger(n))throw new Error('Invalid answer');const correct=n===s.data.target;if(correct){p.score+=100;p.done=true;}else{p.strikes++;p.score=Math.max(0,p.score-20);}s.round++;return{correct,score:p.score};}
  if(action==='crossword.letter'){if(s.kind!=='crossword')throw new Error('Wrong game');const i=Number(payload?.index),letter=String(payload?.letter||'').toUpperCase();if(!Number.isInteger(i)||i<0||i>=s.data.word.length||letter.length!==1)throw new Error('Invalid letter');if(letter===s.data.word[i]){s.data.letters[i]=letter;p.score+=20;}else{p.strikes++;p.score=Math.max(0,p.score-5);}if(s.data.letters.every((x:string)=>x))p.done=true;return{score:p.score,complete:p.done};}
  if(action==='chess.move'){if(s.kind!=='chess')throw new Error('Wrong game');const ids=Object.keys(s.players),idx=ids.indexOf(userId);if(idx<0||idx!==s.data.turnIndex%ids.length)throw new Error('Not your turn');const f:[number,number]=[Number(payload?.fx),Number(payload?.fy)],t:[number,number]=[Number(payload?.tx),Number(payload?.ty)];if(!f.every(Number.isInteger)||!t.every(Number.isInteger))throw new Error('Invalid move');if(!chessLegal(s.data.board,f,t,idx===0))throw new Error('Illegal move');const captured=s.data.board[t[0]][t[1]];s.data.board[t[0]][t[1]]=s.data.board[f[0]][f[1]];s.data.board[f[0]][f[1]]=null;s.data.moves++;s.data.turnIndex++;p.score+=captured?.[1]==='k'?1000:10;if(captured?.[1]==='k'){p.done=true;s.data.winner=userId;}return{score:p.score,winner:s.data.winner};}

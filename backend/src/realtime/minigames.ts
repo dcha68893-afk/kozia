@@ -1,10 +1,11 @@
 import { randomUUID, createHash } from 'crypto';
+import { config } from '../config';
 import { GAME_RULES, GameId, validGame } from '../game/minigames';
 import { pool } from '../db/pool';
 import { checkAchievements } from '../services/progression';
 import { sendTo } from './presence';
 import { applyCompetitiveAction, createCompetitiveState, CompetitiveKind, EngineState } from '../game/competitiveGames';
-import { saveMatchState, publishMatch } from './redisState';
+import { saveMatchState } from './redisState';
 
 export interface MatchPlayer { userId:string; username:string; connected:boolean; score:number; ready:boolean; done:boolean; actionSeq:number; lastActionAt:number; strikes:number; }
 export interface MatchState { id:string; code:string; gameId:GameId; hostId:string; status:'lobby'|'playing'|'finished'; sequence:number; players:MatchPlayer[]; startedAt:number|null; finishedAt:number|null; game:any; }
@@ -44,7 +45,7 @@ class Match{
  private playerOf(u:string){const p=this.state.players.find(x=>x.userId===u);if(!p)throw new Error('Not in match');return p;}
  private guard(p:MatchPlayer){
  const now=Date.now();
- if(now-p.lastActionAt<80){p.strikes++;void this.audit(p,'rate-limit',false,'Actions too fast');if(p.strikes>=5)void this.audit(p,'repeated-rate-limit',false,'Repeated impossible action rate');throw new Error('Actions too fast');}
+ if(now-p.lastActionAt<config.antiCheatWindowMs){p.strikes++;void this.audit(p,'rate-limit',false,'Actions too fast');if(p.strikes>=5)void this.audit(p,'repeated-rate-limit',false,'Repeated impossible action rate');throw new Error('Actions too fast');}
  p.lastActionAt=now;p.actionSeq++;this.state.sequence++;
 }
 private audit(p:MatchPlayer,reason:string,accepted:boolean,detail:string){

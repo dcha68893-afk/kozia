@@ -11,3 +11,17 @@ export async function setUserMatch(userId:string,matchId:string,ttl=900){const r
 export async function getUserMatch(userId:string){const r=redisClient();return r?await r.get('user-match:'+userId):null;}
 export async function clearUserMatch(userId:string){const r=redisClient();if(r)await r.del('user-match:'+userId);}
 export async function publishMatch(matchId:string,event:unknown){const r=redisPublisher();if(r)await r.publish('match-events:'+matchId,JSON.stringify(event));}
+
+export async function pingRedis(): Promise<boolean> {
+  const r = redisClient();
+  if (!r) return !config.requireRedis;
+  try { return (await r.ping()) === 'PONG'; } catch { return false; }
+}
+
+export async function closeRedis(): Promise<void> {
+  const clients = [client, pub, sub];
+  client = null; pub = null; sub = null;
+  await Promise.all(clients.filter(Boolean).map(async (r) => {
+    try { await r!.quit(); } catch { r!.disconnect(); }
+  }));
+}
