@@ -30,7 +30,10 @@ class Match{
   this.state={id:randomUUID(),code:makeCode(),gameId,hostId:host.userId,status:'lobby',sequence:0,players:[this.player(host.userId,host.username)],startedAt:null,finishedAt:null,game:gameFor(gameId)};
  }
  private player(userId:string,username:string):MatchPlayer{return{userId,username,connected:true,score:0,ready:false,done:false,actionSeq:0,lastActionAt:0,strikes:0};}
- private game(userId:string){return this.privateGames.get(userId)||this.state.game;}
+ private game(userId:string){
+  if(this.competitive && ['trivers','crossword','chess','racing','team-strategy'].includes(this.state.gameId)) return this.competitive;
+  return this.privateGames.get(userId)||this.state.game;
+ }
  public snapshot(userId?:string){return{...this.state,game:userId?publicGame(this.game(userId)):publicGame(this.state.game)};}
  private broadcast(t:string,d:any={}){for(const p of this.state.players)if(p.connected)sendTo(p.userId,t,d);}
  private sync(){for(const p of this.state.players)if(p.connected)this.sendState(p.userId);}

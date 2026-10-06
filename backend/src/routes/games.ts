@@ -6,13 +6,13 @@ export const gamesRouter = Router();
 
 const catalog = [
   { id:'tube', name:'Tube Challenge', players:'2-8', competitive:true, serverAuthoritative:true },
-  { id:'water-sort', name:'Water Sort', players:'1-4', competitive:true, serverAuthoritative:true },
-  { id:'block-puzzle', name:'Block Puzzle', players:'1-4', competitive:true, serverAuthoritative:true },
+  { id:'water-sort', name:'Water Sort', players:'2-4', competitive:true, serverAuthoritative:true },
+  { id:'block-puzzle', name:'Block Puzzle', players:'2-4', competitive:true, serverAuthoritative:true },
   { id:'trivers', name:'Trivers', players:'2-8', competitive:true, serverAuthoritative:true },
   { id:'crossword', name:'Crossword', players:'2-8', competitive:true, serverAuthoritative:true },
   { id:'chess', name:'Chess', players:'2', competitive:true, serverAuthoritative:true },
-  { id:'reaction', name:'Reaction', players:'1-8', competitive:true, serverAuthoritative:true },
-  { id:'memory', name:'Memory', players:'1-8', competitive:true, serverAuthoritative:true },
+  { id:'reaction', name:'Reaction', players:'2-8', competitive:true, serverAuthoritative:true },
+  { id:'memory', name:'Memory', players:'2-8', competitive:true, serverAuthoritative:true },
   { id:'racing', name:'Reaction Racing', players:'2-8', competitive:true, serverAuthoritative:true },
   { id:'team-strategy', name:'Team Strategy', players:'2-8', competitive:true, serverAuthoritative:true }
 ] as const;
