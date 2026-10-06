@@ -15,6 +15,8 @@ npm run dev
 
 3. Open the Vite URL shown in the terminal, normally `http://localhost:5173`.
 
+For Google sign-in, set `VITE_GOOGLE_CLIENT_ID` to the same Google OAuth Web Client ID configured on the backend as `GOOGLE_CLIENT_ID`. Add `http://localhost:5173` as an authorized JavaScript origin in Google Cloud for local testing.
+
 The client defaults to:
 - HTTP API: `http://localhost:3000`
 - WebSocket: `ws://localhost:3000`
