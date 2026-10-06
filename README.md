@@ -47,3 +47,20 @@ Accounts (bcrypt + JWT), lockout-safe rate limits, level/XP and 6 character evol
 - Presence/rooms are in server memory: run **one backend instance** (add Redis pub/sub before scaling horizontally).
 - The Unity client was written without a Unity editor available, so expect small first-compile fixes. The backend was fully tested (TypeScript build + PostgreSQL + WebSocket end-to-end).
 - A player can in theory automate tracking the ball; the daily coin cap, 2-player minimum and rate limits limit farming.
+
+
+## Production architecture added
+
+- Competitive matches now isolate Water Sort, Block Puzzle and Memory state per player.
+- Trivers, Crossword, Chess, Racing and Team Strategy have server-side competitive engines and scoring.
+- Match results settle transactionally in PostgreSQL; clients cannot submit final scores.
+- Match actions receive server-side sequencing/rate checks and are persisted to anti-cheat audit tables.
+- Render Key Value/Valkey support is included through `REDIS_URL` and production requires shared state by default.
+- `render.yaml` provisions the API, PostgreSQL and Valkey architecture for a live deployment.
+- Mobile runtime automatically selects conservative quality/FPS settings on lower-memory Android/iOS devices.
+
+### Live deployment requirements
+
+The repository is production-oriented, but **AAA art and real-device QA cannot be truthfully completed from source control alone**. The Unity project still needs imported production character meshes/rigs, mocap clips, hotel/environment asset packs, VFX, music/SFX, lighting/post-processing profiles, and final Android/iOS signing/build testing on physical devices.
+
+Render WebSocket services are supported, and Key Value is Redis-compatible/Valkey-backed. For horizontal scaling, keep the API and Key Value in the same Render region and use the internal connection string. Production Key Value should use persistence on a paid plan; the free instance is suitable only for temporary testing. Render's Key Value service is Valkey 8 and is compatible with Redis clients. 

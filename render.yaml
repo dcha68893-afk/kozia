@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: necpra-world-api
+    runtime: node
+    region: frankfurt
+    plan: 1c-2g
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /ready
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: necpra-world-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: necpra-world-state
+          type: keyvalue
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGINS
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: REQUIRE_REDIS
+        value: "true"
+      - key: ALLOW_SOLO_ROOMS
+        value: "false"
+      - key: DAILY_COIN_CAP
+        value: "3000"
+      - key: TUBE_ROUNDS
+        value: "5"
+      - key: ANTI_CHEAT_WINDOW_MS
+        value: "80"
+
+  - type: keyvalue
+    name: necpra-world-state
+    region: frankfurt
+    plan: 1g
+    maxmemoryPolicy: noeviction
+    persistenceMode: journal-snapshot
+    ipAllowList: []
+
+databases:
+  - name: necpra-world-db
+    region: frankfurt
+    plan: basic_1gb
+    databaseName: necpra
+    user: necpra

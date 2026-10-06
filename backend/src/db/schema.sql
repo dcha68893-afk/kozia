@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS game_results (
   xp INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS game_results_match_once ON game_results (room_id, user_id, round_no, kind);
 CREATE INDEX IF NOT EXISTS game_results_user_time ON game_results (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS tournaments (
@@ -115,3 +116,29 @@ CREATE TABLE IF NOT EXISTS achievements (
   unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, key)
 );
+
+
+CREATE TABLE IF NOT EXISTS game_action_events (
+  id BIGSERIAL PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  seq INT NOT NULL,
+  action TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  accepted BOOLEAN NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(room_id,user_id,seq)
+);
+CREATE INDEX IF NOT EXISTS game_action_events_room_time ON game_action_events(room_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS suspicious_game_actions (
+  id BIGSERIAL PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason TEXT NOT NULL,
+  strikes INT NOT NULL DEFAULT 1,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS suspicious_game_actions_user_time ON suspicious_game_actions(user_id,created_at DESC);

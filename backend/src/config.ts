@@ -18,6 +18,9 @@ export const config = {
   databaseSsl: bool('DATABASE_SSL'),
   jwtSecret: need('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  redisUrl: process.env.REDIS_URL ?? '',
+  requireRedis: bool('REQUIRE_REDIS', env === 'production'),
+  antiCheatWindowMs: num('ANTI_CHEAT_WINDOW_MS', 80),
   corsOrigins: (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean),
   bannedWords: (process.env.BANNED_WORDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   allowSoloRooms: bool('ALLOW_SOLO_ROOMS'),
@@ -31,6 +34,7 @@ export const config = {
 };
 
 if (config.isProd) {
+  if (config.requireRedis && !config.redisUrl) throw new Error('REDIS_URL is required in production');
   if (config.jwtSecret.length < 32) throw new Error('JWT_SECRET must be at least 32 characters in production');
   if (config.corsOrigins.includes('*')) console.warn('[warn] CORS_ORIGINS=* in production. Restrict it to your frontend origin.');
   if (config.allowSoloRooms) console.warn('[warn] ALLOW_SOLO_ROOMS=true in production allows solo coin farming.');

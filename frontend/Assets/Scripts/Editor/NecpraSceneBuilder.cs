@@ -165,6 +165,7 @@ public static class NecpraSceneBuilder
         var audio = sys.AddComponent<NecpraAudioDirector>();
         var games = sys.AddComponent<NecpraMiniGameCatalog>();
         var miniGameRuntime = sys.AddComponent<NecpraMiniGameRuntime>();
+        sys.AddComponent<NecpraMobileRuntime>();
         cinematic.targetCamera = cam; cinematic.lobby = Point("WideCamera", new Vector3(0, 7.5f, -16f), sys.transform);
         cinematic.table = tableCam; cinematic.close = closeCam;
 
