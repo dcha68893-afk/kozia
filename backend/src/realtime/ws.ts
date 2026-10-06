@@ -9,6 +9,7 @@ import { levelFromXp, stageForLevel } from '../services/progression';
 import { cleanText } from '../util';
 import { Conn, conns, send, sendTo } from './presence';
 import { createRoom, joinRoom, leaveCurrent, listPublic, roomOf } from './rooms';
+import { createMatch, joinMatch, leaveMatch, matchOf } from './minigames';
 
 export const ZONES: Record<string, { cx: number; cz: number; r: number }> = {
   lobby: { cx: 0, cz: 0, r: 24 },
@@ -139,6 +140,19 @@ async function handle(c: Conn, t: string, d: any) {
       if (!r) throw new Error('Not in a room');
       return r.pick(c.userId, Number(d?.slot));
     }
+    case 'game.match.create': {
+      leaveCurrent(c.userId); const m=createMatch({userId:c.userId,username:c.username},String(d?.gameId ?? ''));
+      return send(c,'game.match.joined',m.snapshot());
+    }
+    case 'game.match.join': {
+      leaveCurrent(c.userId); const m=joinMatch({userId:c.userId,username:c.username},String(d?.code ?? ''));
+      return send(c,'game.match.joined',m.snapshot());
+    }
+    case 'game.match.ready': { const m=matchOf(c.userId); if(!m) throw new Error('Not in a match'); return m.ready(c.userId); }
+    case 'game.match.start': { const m=matchOf(c.userId); if(!m) throw new Error('Not in a match'); return m.start(c.userId); }
+    case 'game.match.action': { const m=matchOf(c.userId); if(!m) throw new Error('Not in a match'); return m.action(c.userId,String(d?.action ?? ''),d?.payload ?? {}); }
+    case 'game.match.finish': { const m=matchOf(c.userId); if(!m) throw new Error('Not in a match'); return m.finish(c.userId,Number(d?.score)); }
+    case 'game.match.leave': { leaveMatch(c.userId); return send(c,'game.match.left'); }
     case 'room.invite': {
       const r = roomOf(c.userId);
       if (!r) throw new Error('Not in a room');
@@ -195,6 +209,7 @@ async function onConnection(ws: WebSocket, token: string | null) {
     leaveZone(c);
     conns.delete(user!.id);
     roomOf(user!.id)?.disconnect(user!.id);
+    matchOf(user!.id)?.disconnect(user!.id);
   });
   ws.on('error', () => ws.terminate());
 }

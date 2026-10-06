@@ -92,6 +92,7 @@ public class NecpraMiniGameRuntime : MonoBehaviour
         if (selectedTube == index) { selectedTube = -1; return; }
         var from = water[selectedTube]; var to = water[index];
         if (from.Count == 0 || to.Count >= 4) { selectedTube = -1; return; }
+        int sourceIndex = selectedTube;
         int color = from[from.Count-1];
         if (to.Count > 0 && to[to.Count-1] != color) { selectedTube = -1; return; }
         int run = 1;

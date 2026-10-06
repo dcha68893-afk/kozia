@@ -25,6 +25,8 @@ public class GameUI : MonoBehaviour
     List<TournamentDto> tourneys = new List<TournamentDto>();
     List<RoomListEntry> rooms = new List<RoomListEntry>();
     string boardType = "global";
+    string onlineMatchCode = "";
+    string onlineGameId = "";
     NecpraGraphicsSettings graphics;
     NecpraCinematicCamera cinematic;
     NecpraAudioDirector audio;
@@ -42,6 +44,8 @@ public class GameUI : MonoBehaviour
         cinematic = FindFirstObjectByType<NecpraCinematicCamera>();
         audio = FindFirstObjectByType<NecpraAudioDirector>();
         miniGames = FindFirstObjectByType<NecpraMiniGameRuntime>();
+        var ws = WsClient.I;
+        if (ws != null) ws.On("game.match.joined", d => { onlineMatchCode = (string)d["code"] ?? ""; onlineGameId = (string)d["gameId"] ?? ""; if (miniGames != null) miniGames.SetOnline((string)d["id"] ?? ""); });
         fullscreen = Screen.fullScreen;
         var ws = WsClient.I;
         ws.On("room.list", d => rooms = d["rooms"].ToObject<List<RoomListEntry>>());
@@ -339,16 +343,32 @@ public class GameUI : MonoBehaviour
             GUILayout.Label(g.Item3);
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("PLAY", GUILayout.Width(100), GUILayout.Height(42)))
+            if (GUILayout.Button("PLAY", GUILayout.Width(90), GUILayout.Height(42)))
             {
                 miniGames.Open(g.Item1);
                 panel = Panel.None;
+            }
+            if (GUILayout.Button("ONLINE", GUILayout.Width(90), GUILayout.Height(42)))
+            {
+                onlineGameId = g.Item1.Replace("WaterSort", "water-sort").Replace("BlockPuzzle", "block-puzzle").ToLowerInvariant();
+                WsClient.I?.Send("game.match.create", new { gameId = onlineGameId });
+                toast = "Creating online match..."; toastUntil = Time.time + 3f;
             }
             GUILayout.EndHorizontal();
         }
         GUILayout.Space(10);
         GUILayout.Label("<b>ONLINE MODES</b>");
         GUILayout.Label("Tube Challenge is already wired to the live multiplayer room system. Trivers, Crossword, Chess, Racing and Team Strategy remain catalogued for their server-authoritative match adapters.");
+        if (!string.IsNullOrEmpty(onlineMatchCode))
+        {
+            GUILayout.Space(8);
+            GUILayout.Label("ONLINE MATCH: " + onlineGameId + "   CODE: " + onlineMatchCode);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("READY", GUILayout.Height(38))) WsClient.I?.Send("game.match.ready");
+            if (GUILayout.Button("START", GUILayout.Height(38))) WsClient.I?.Send("game.match.start");
+            if (GUILayout.Button("LEAVE", GUILayout.Height(38))) { WsClient.I?.Send("game.match.leave"); onlineMatchCode = ""; }
+            GUILayout.EndHorizontal();
+        }
         if (GUILayout.Button("OPEN MULTIPLAYER ROOMS", GUILayout.Height(42))) Open(Panel.Rooms);
     }
 
