@@ -1,0 +1,11 @@
+node_modules/
+dist/
+backend/.env
+frontend/Library/
+frontend/Temp/
+frontend/Logs/
+frontend/obj/
+frontend/Build/
+frontend/UserSettings/
+*.csproj
+*.sln

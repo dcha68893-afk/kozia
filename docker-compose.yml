@@ -1,0 +1,25 @@
+# Local full stack:  docker compose up --build
+# Production: use the backend/Dockerfile on your host and a managed PostgreSQL.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: necpra
+      POSTGRES_PASSWORD: necpra
+      POSTGRES_DB: necpra
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U necpra"]
+      interval: 5s
+      retries: 10
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgres://necpra:necpra@db:5432/necpra
+      NODE_ENV: development
+    ports: ["3000:3000"]
+    depends_on:
+      db: { condition: service_healthy }
+volumes:
+  pgdata:
