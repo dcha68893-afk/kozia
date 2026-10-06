@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 
 export const gamesRouter = Router();
 
@@ -25,7 +25,7 @@ const actionSchema=z.object({
   payload:z.record(z.unknown()).default({})
 });
 
-gamesRouter.post('/validate-action', auth, async (req,res,next)=>{
+gamesRouter.post('/validate-action', requireAuth, async (req,res,next)=>{
   try {
     const input=actionSchema.parse(req.body);
     const allowed=catalog.some(g=>g.id===input.gameId);

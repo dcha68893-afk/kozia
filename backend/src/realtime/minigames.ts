@@ -30,7 +30,7 @@ class Match{
  }
  private player(userId:string,username:string):MatchPlayer{return{userId,username,connected:true,score:0,ready:false,done:false,actionSeq:0,lastActionAt:0,strikes:0};}
  private game(userId:string){return this.privateGames.get(userId)||this.state.game;}
- private snapshot(userId?:string){return{...this.state,game:userId?publicGame(this.game(userId)):publicGame(this.state.game)};}
+ public snapshot(userId?:string){return{...this.state,game:userId?publicGame(this.game(userId)):publicGame(this.state.game)};}
  private broadcast(t:string,d:any={}){for(const p of this.state.players)if(p.connected)sendTo(p.userId,t,d);}
  private sync(){for(const p of this.state.players)if(p.connected)this.sendState(p.userId);}
  private sendState(userId:string){sendTo(userId,'game.match.state',{matchId:this.state.id,seq:this.state.sequence,score:this.state.players.find(p=>p.userId===userId)?.score??0,done:this.state.players.find(p=>p.userId===userId)?.done??false,game:publicGame(this.game(userId)),serverNow:Date.now()});}
