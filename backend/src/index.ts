@@ -16,6 +16,7 @@ import { profileRouter } from './routes/profile';
 import { shopRouter } from './routes/shop';
 import { socialRouter } from './routes/social';
 import { tournamentRouter } from './routes/tournaments';
+import { gamesRouter } from './routes/games';
 import { startTournamentScheduler } from './services/tournaments';
 
 async function main() {
@@ -52,6 +53,7 @@ async function main() {
   app.use('/api/economy', economyRouter);
   app.use('/api/leaderboard', leaderboardRouter);
   app.use('/api/tournaments', tournamentRouter);
+  app.use('/api/games', gamesRouter);
   app.use('/api/social', socialRouter);
   app.use('/api/mod', modRouter);
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));

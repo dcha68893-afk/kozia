@@ -29,6 +29,7 @@ public class GameUI : MonoBehaviour
     NecpraCinematicCamera cinematic;
     NecpraAudioDirector audio;
     bool fullscreen = true;
+    NecpraMiniGameRuntime miniGames;
     float uiScale = 1f;
     Appearance edit;
 
@@ -40,6 +41,7 @@ public class GameUI : MonoBehaviour
         graphics = FindFirstObjectByType<NecpraGraphicsSettings>();
         cinematic = FindFirstObjectByType<NecpraCinematicCamera>();
         audio = FindFirstObjectByType<NecpraAudioDirector>();
+        miniGames = FindFirstObjectByType<NecpraMiniGameRuntime>();
         fullscreen = Screen.fullScreen;
         var ws = WsClient.I;
         ws.On("room.list", d => rooms = d["rooms"].ToObject<List<RoomListEntry>>());
@@ -315,25 +317,39 @@ public class GameUI : MonoBehaviour
 
     void DrawGames()
     {
-        GUILayout.Label("<b>NECPRA GAME HALL</b>  •  Competitive social games");
-        GUILayout.Label("Choose a mode. Tube Challenge is the live multiplayer vertical slice; the other modes are catalogued for their production gameplay modules.");
+        GUILayout.Label("<b>NECPRA GAME HALL</b>  •  Playable social mini-games");
+        GUILayout.Label("These modes run locally with deterministic rules now; competitive settlement remains server-authoritative.");
         GUILayout.Space(8);
-        var names = NecpraMiniGameCatalog.Names;
-        for (int i = 0; i < names.Length; i++)
+        if (miniGames == null)
+        {
+            GUILayout.Label("Game runtime is not attached to this scene.");
+            return;
+        }
+        var playable = new[] {
+            ("WaterSort", "Water Sort", "Sort every colour into its tube."),
+            ("BlockPuzzle", "Block Puzzle", "Fill rows and columns to score."),
+            ("Reaction", "Reaction", "Test your reaction time."),
+            ("Memory", "Memory", "Find all matching pairs.")
+        };
+        foreach (var g in playable)
         {
             GUILayout.BeginHorizontal(GUI.skin.box);
-            GUILayout.Label((i + 1).ToString("00") + "  " + names[i]);
+            GUILayout.BeginVertical();
+            GUILayout.Label("<b>" + g.Item2 + "</b>");
+            GUILayout.Label(g.Item3);
+            GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
-            if (i == 0)
+            if (GUILayout.Button("PLAY", GUILayout.Width(100), GUILayout.Height(42)))
             {
-                if (GUILayout.Button("Find room", GUILayout.Width(110))) { Open(Panel.Rooms); }
-            }
-            else
-            {
-                GUI.enabled = false; GUILayout.Button("Coming next", GUILayout.Width(110)); GUI.enabled = true;
+                miniGames.Open(g.Item1);
+                panel = Panel.None;
             }
             GUILayout.EndHorizontal();
         }
+        GUILayout.Space(10);
+        GUILayout.Label("<b>ONLINE MODES</b>");
+        GUILayout.Label("Tube Challenge is already wired to the live multiplayer room system. Trivers, Crossword, Chess, Racing and Team Strategy remain catalogued for their server-authoritative match adapters.");
+        if (GUILayout.Button("OPEN MULTIPLAYER ROOMS", GUILayout.Height(42))) Open(Panel.Rooms);
     }
 
     void DrawSettings()
