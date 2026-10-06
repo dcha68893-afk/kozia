@@ -3,11 +3,8 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
-/// Client side of a server-run tube match. It never decides outcomes: it plays the shuffle the
-/// server sends, sends the player's pick, and shows the server's reveal.
 public class TubeTable : MonoBehaviour
 {
-    [Header("Scene (assigned by Necpra > Build Main Scene)")]
     public Tube[] tubes;
     public Transform[] slotPoints;
     public Transform ball;
@@ -36,7 +33,6 @@ public class TubeTable : MonoBehaviour
         ResetTubes();
         ball.gameObject.SetActive(false);
         var ws = WsClient.I;
-
         ws.On("room.update", d => OnRoomUpdate(d.ToObject<RoomSnapshot>()));
         ws.On("room.left", _ => LeaveLocal());
         ws.On("tube.aborted", d => { Banner = "Match aborted: " + (string)d["reason"]; Phase = "lobby"; });
@@ -51,15 +47,13 @@ public class TubeTable : MonoBehaviour
         ws.On("tube.shuffle", d =>
         {
             Phase = "shuffle"; Banner = "Follow the ball!";
-            var swaps = d["swaps"].ToObject<List<int[]>>();
-            Play(ShuffleAnim(swaps, (float)d["swapMs"] / 1000f));
+            Play(ShuffleAnim(d["swaps"].ToObject<List<int[]>>(), (float)d["swapMs"] / 1000f));
         });
         ws.On("tube.select", d => { Phase = "select"; Picked = false; phaseEnds = Time.time + (float)d["ms"] / 1000f; Banner = "Tap the tube with the ball!"; });
         ws.On("tube.reveal", d =>
         {
-            Phase = "reveal"; phaseEnds = Time.time + (float)d["ms"] / 1000f;
+            Phase = "reveal"; phaseEnds = Time.time + (float)d["ms"] / 1000f; Banner = "Reveal!";
             var results = d["results"].ToObject<List<PickResult>>();
-            Banner = "Reveal!";
             foreach (var r in results)
             {
                 Log.Add(r.username + (r.correct ? " found it (+" + r.coins + " coins)" : " missed"));
@@ -84,6 +78,7 @@ public class TubeTable : MonoBehaviour
     {
         bool entering = Room == null;
         Room = snap; Phase = snap.phase; Round = snap.round; TotalRounds = snap.totalRounds;
+        world.InGameRoom = true;
         if (entering) { Log.Clear(); Banner = "Waiting for host to start"; ResetTubes(); }
         SyncSeats();
         if (snap.phase == "lobby") { Picked = false; Banner = "Waiting for host to start"; ResetTubes(); }
@@ -91,7 +86,7 @@ public class TubeTable : MonoBehaviour
 
     void LeaveLocal()
     {
-        Room = null; Phase = "lobby";
+        Room = null; Phase = "lobby"; world.InGameRoom = false;
         foreach (var kv in seated) if (kv.Value) Destroy(kv.Value.gameObject);
         seated.Clear();
         ball.gameObject.SetActive(false);
@@ -106,48 +101,41 @@ public class TubeTable : MonoBehaviour
         {
             if (m.spectator) continue;
             present.Add(m.userId);
-            if (!seated.ContainsKey(m.userId) && i < seats.Length)
+            if (!seated.ContainsKey(m.userId))
             {
-                var go = new GameObject("Seat_" + m.username);
-                var av = go.AddComponent<AvatarView>();
-                av.interpolate = false;
+                var av = new GameObject("Seat_" + m.username).AddComponent<AvatarView>();
                 av.Build(m.username, m.look, m.stage);
-                var center = slotPoints[1].position; center.y = seats[i].position.y;
-                av.Snap(seats[i].position, Quaternion.LookRotation(center - seats[i].position).eulerAngles.y);
+                av.Snap(seats[Mathf.Min(i, seats.Length - 1)].position, 180);
                 seated[m.userId] = av;
             }
             i++;
         }
-        foreach (var id in new List<string>(seated.Keys))
-            if (!present.Contains(id)) { if (seated[id]) Destroy(seated[id].gameObject); seated.Remove(id); }
+        foreach (var kv in new Dictionary<string, AvatarView>(seated))
+            if (!present.Contains(kv.Key)) { if (kv.Value) Destroy(kv.Value.gameObject); seated.Remove(kv.Key); }
     }
-
-    void Play(IEnumerator routine) { if (anim != null) StopCoroutine(anim); anim = StartCoroutine(routine); }
 
     void ResetTubes()
     {
-        if (atSlot == null) return;
-        for (int i = 0; i < tubes.Length; i++)
-        {
-            tubes[i].Slot = i;
-            tubes[i].Place(slotPoints[i].position);
-            atSlot[i] = tubes[i];
-        }
+        if (atSlot == null) atSlot = new Tube[tubes.Length];
+        for (int i = 0; i < tubes.Length; i++) { atSlot[i] = tubes[i]; tubes[i].Slot = i; tubes[i].Place(slotPoints[i].position); }
     }
+
+    void Play(IEnumerator r) { if (anim != null) StopCoroutine(anim); anim = StartCoroutine(r); }
 
     IEnumerator PrepareAnim(int ballSlot)
     {
         ResetTubes();
-        ball.position = slotPoints[ballSlot].position + Vector3.down * 0.3f;
+        ball.position = slotPoints[ballSlot].position + Vector3.down * 0.35f;
         ball.gameObject.SetActive(true);
-        yield return atSlot[ballSlot].Lift(0.5f);
-        yield return new WaitForSeconds(1.4f);
-        yield return atSlot[ballSlot].Lower(0.5f);
+        yield return atSlot[ballSlot].Lift(0.45f);
+        yield return new WaitForSeconds(1.0f);
+        yield return atSlot[ballSlot].Lower(0.4f);
         ball.gameObject.SetActive(false);
     }
 
     IEnumerator ShuffleAnim(List<int[]> swaps, float swapSec)
     {
+        ball.gameObject.SetActive(false);
         foreach (var s in swaps)
         {
             Tube ta = atSlot[s[0]], tb = atSlot[s[1]];
@@ -171,7 +159,7 @@ public class TubeTable : MonoBehaviour
 
     public void Pick(int slot)
     {
-        if (Phase != "select" || Picked) return;
+        if (Phase != "select" || Picked || slot < 0 || slot >= tubes.Length) return;
         Picked = true;
         WsClient.I.Send("room.pick", new { slot });
     }
@@ -182,7 +170,6 @@ public class TubeTable : MonoBehaviour
         Transform target = Phase == "reveal" ? closeCam : tableCam;
         cam.transform.position = Vector3.Lerp(cam.transform.position, target.position, Time.deltaTime * 2.5f);
         cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, target.rotation, Time.deltaTime * 2.5f);
-
         if (Phase == "select" && !Picked)
         {
             bool down = Input.GetMouseButtonDown(0) || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began);

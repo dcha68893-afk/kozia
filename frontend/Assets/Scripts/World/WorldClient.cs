@@ -3,19 +3,16 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
-/// Zone presence, other players' avatars, emotes and chat log. Mirrors backend ZONES.
 public class WorldClient : MonoBehaviour
 {
     public static readonly Dictionary<string, Vector3> Centers = new Dictionary<string, Vector3>
     {
-        { "lobby", new Vector3(0, 0, 0) },
-        { "restaurant", new Vector3(60, 0, 0) },
-        { "gamehall", new Vector3(120, 0, 0) },
+        { "lobby", new Vector3(0, 0, 0) }, { "restaurant", new Vector3(60, 0, 0) }, { "gamehall", new Vector3(120, 0, 0) },
     };
     public const float ZoneRadius = 24f;
-
     public LocalPlayer player;
     public string Zone = "lobby";
+    public bool InGameRoom { get; set; }
     public readonly List<string> Chat = new List<string>();
     readonly Dictionary<string, AvatarView> others = new Dictionary<string, AvatarView>();
 
@@ -36,7 +33,7 @@ public class WorldClient : MonoBehaviour
         ws.On("world.state", d =>
         {
             foreach (var p in d["p"].ToObject<List<PosUpdate>>())
-                if (others.TryGetValue(p.id, out var av)) av.SetTarget(new Vector3(p.x, p.y, p.z), p.ry);
+                if (others.TryGetValue(p.id, out var av)) av.SetTarget(new Vector3(p.x, p.y, p.z), p.ry, p.a);
         });
         ws.On("world.correct", d => player.Teleport(new Vector3((float)d["x"], (float)d["y"], (float)d["z"])));
         ws.On("world.emote", d =>
@@ -50,19 +47,25 @@ public class WorldClient : MonoBehaviour
         ws.On("chat.private", d => AddChat("[DM " + (string)d["from"] + " > " + (string)d["to"] + "] " + (string)d["text"]));
     }
 
-    public void Join(string zone) { WsClient.I.Send("world.join", new { zone }); }
+    public void Join(string zone)
+    {
+        if (string.IsNullOrWhiteSpace(zone) || WsClient.I == null) return;
+        WsClient.I.Send("world.join", new { zone });
+    }
+
     public void SendChat(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
-        if (text.StartsWith("/w "))
+        if (text.StartsWith("/w ", StringComparison.OrdinalIgnoreCase))
         {
             var parts = text.Substring(3).Split(new[] { ' ' }, 2);
             if (parts.Length == 2) WsClient.I.Send("chat.private", new { to = parts[0], text = parts[1] });
             return;
         }
-        WsClient.I.Send(FindFirstObjectByType<TubeTable>().InRoom ? "chat.room" : "chat.zone", new { text });
+        WsClient.I.Send(InGameRoom ? "chat.room" : "chat.zone", new { text });
     }
-    public void Emote(string e) { WsClient.I.Send("world.emote", new { e }); }
+
+    public void Emote(string e) { if (!string.IsNullOrEmpty(e)) WsClient.I.Send("world.emote", new { e }); }
 
     void AddChat(string line) { Chat.Add(line); if (Chat.Count > 60) Chat.RemoveAt(0); }
 
@@ -76,6 +79,15 @@ public class WorldClient : MonoBehaviour
         av.Snap(new Vector3(p.x, p.y, p.z), p.ry);
         others[p.id] = av;
     }
-    void Remove(string id) { if (others.TryGetValue(id, out var av)) { if (av) Destroy(av.gameObject); others.Remove(id); } }
-    void ClearOthers() { foreach (var kv in others) if (kv.Value) Destroy(kv.Value.gameObject); others.Clear(); }
+
+    void Remove(string id)
+    {
+        if (others.TryGetValue(id, out var av)) { if (av) Destroy(av.gameObject); others.Remove(id); }
+    }
+
+    void ClearOthers()
+    {
+        foreach (var kv in others) if (kv.Value) Destroy(kv.Value.gameObject);
+        others.Clear();
+    }
 }

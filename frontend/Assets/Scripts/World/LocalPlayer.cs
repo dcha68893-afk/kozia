@@ -1,7 +1,6 @@
 using UnityEngine;
 
-/// Moves the local avatar (WASD / arrows / left-bottom touch stick), follows with the camera,
-/// and streams position to the server. The server validates speed and zone bounds.
+/// Desktop + touch movement with server-authoritative position streaming and a smoother third-person camera.
 public class LocalPlayer : MonoBehaviour
 {
     public Camera cam;
@@ -9,6 +8,9 @@ public class LocalPlayer : MonoBehaviour
     public TubeTable table;
     public float speed = 5f;
     public string zone = "lobby";
+    public float cameraDistance = 8f;
+    public float cameraHeight = 6.5f;
+    public float cameraFollow = 7f;
 
     float sendAt;
     Vector3 lastSent;
@@ -28,12 +30,12 @@ public class LocalPlayer : MonoBehaviour
 
     Vector2 ReadInput()
     {
-        if (GUIUtility.keyboardControl != 0) return Vector2.zero; // typing in a text field
+        if (GUIUtility.keyboardControl != 0) return Vector2.zero;
         Vector2 v = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
         for (int i = 0; i < Input.touchCount; i++)
         {
             var t = Input.GetTouch(i);
-            if (t.phase == TouchPhase.Began && touchId < 0 && t.position.x < Screen.width * 0.4f && t.position.y < Screen.height * 0.5f)
+            if (t.phase == TouchPhase.Began && touchId < 0 && t.position.x < Screen.width * 0.45f && t.position.y < Screen.height * 0.55f)
             { touchId = t.fingerId; touchOrigin = t.position; }
             if (t.fingerId == touchId)
             {
@@ -54,11 +56,15 @@ public class LocalPlayer : MonoBehaviour
 
         Vector2 input = ReadInput();
         Vector3 move = new Vector3(input.x, 0, input.y);
-        if (move.sqrMagnitude > 0.01f)
+        bool moving = move.sqrMagnitude > 0.01f;
+        if (moving)
         {
-            transform.position += move.normalized * Mathf.Min(1f, move.magnitude) * speed * Time.deltaTime;
+            move.Normalize();
+            transform.position += move * speed * Time.deltaTime;
             avatar.transform.rotation = Quaternion.Slerp(avatar.transform.rotation, Quaternion.LookRotation(move), Time.deltaTime * 12f);
         }
+        avatar.SetMotion(moving, moving ? Mathf.Clamp01(input.magnitude) : 0f);
+
         if (WorldClient.Centers.TryGetValue(zone, out var c))
         {
             Vector3 off = transform.position - c; off.y = 0;
@@ -78,9 +84,10 @@ public class LocalPlayer : MonoBehaviour
 
         if (cam != null)
         {
-            Vector3 want = transform.position + new Vector3(0, 6.5f, -8f);
-            cam.transform.position = Vector3.Lerp(cam.transform.position, want, Time.deltaTime * 5f);
-            cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, Quaternion.LookRotation(transform.position + Vector3.up * 1.5f - cam.transform.position), Time.deltaTime * 5f);
+            Vector3 want = transform.position - avatar.transform.forward * cameraDistance + Vector3.up * cameraHeight;
+            cam.transform.position = Vector3.Lerp(cam.transform.position, want, Time.deltaTime * cameraFollow);
+            Vector3 lookAt = transform.position + Vector3.up * 1.25f;
+            cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, Quaternion.LookRotation(lookAt - cam.transform.position), Time.deltaTime * cameraFollow);
         }
     }
 }
