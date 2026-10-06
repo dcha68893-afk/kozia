@@ -29,6 +29,7 @@ const SEEDS: Seed[] = [
 export async function migrate(): Promise<void> {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   await pool.query(sql);
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject TEXT UNIQUE');
   for (const s of SEEDS) {
     await pool.query(
       `INSERT INTO items(id,name,category,price_coins,price_gems,min_level,data)
