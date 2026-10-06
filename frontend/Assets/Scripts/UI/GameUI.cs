@@ -47,8 +47,7 @@ public class GameUI : MonoBehaviour
         var ws = WsClient.I;
         if (ws != null) ws.On("game.match.joined", d => { onlineMatchCode = (string)d["code"] ?? ""; onlineGameId = (string)d["gameId"] ?? ""; if (miniGames != null) miniGames.SetOnline((string)d["id"] ?? ""); });
         fullscreen = Screen.fullScreen;
-        var ws = WsClient.I;
-        ws.On("room.list", d => rooms = d["rooms"].ToObject<List<RoomListEntry>>());
+        if (ws != null) ws.On("room.list", d => rooms = d["rooms"].ToObject<List<RoomListEntry>>());
         ws.On("error", d => Toast((string)d["message"]));
         ws.On("room.invited", d => { invite = (string)d["code"]; Toast((string)d["from"] + " invited you to room " + invite); });
     }
