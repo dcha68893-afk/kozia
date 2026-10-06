@@ -25,6 +25,7 @@ public class TubeTable : MonoBehaviour
     float phaseEnds;
     Tube[] atSlot;
     Coroutine anim;
+    Coroutine suspense;
     readonly Dictionary<string, AvatarView> seated = new Dictionary<string, AvatarView>();
 
     void Start()
@@ -41,7 +42,7 @@ public class TubeTable : MonoBehaviour
             Round = (int)d["round"]; TotalRounds = (int)d["totalRounds"]; Picked = false;
             Phase = "prepare"; phaseEnds = Time.time + (float)d["ms"] / 1000f;
             Banner = "Round " + Round + "/" + TotalRounds + ": watch the ball!";
-            Play(PrepareAnim((int)d["ballSlot"]));
+            Play(PrepareAnim((int)d["ballSlot"])); StartSuspense();
         });
         ws.On("tube.observe", d => { Phase = "observe"; phaseEnds = Time.time + (float)d["ms"] / 1000f; Banner = "Get ready..."; });
         ws.On("tube.shuffle", d =>
@@ -52,7 +53,7 @@ public class TubeTable : MonoBehaviour
         ws.On("tube.select", d => { Phase = "select"; Picked = false; phaseEnds = Time.time + (float)d["ms"] / 1000f; Banner = "Tap the tube with the ball!"; });
         ws.On("tube.reveal", d =>
         {
-            Phase = "reveal"; phaseEnds = Time.time + (float)d["ms"] / 1000f; Banner = "Reveal!";
+            StopSuspense(); Phase = "reveal"; phaseEnds = Time.time + (float)d["ms"] / 1000f; Banner = "Reveal!";
             var results = d["results"].ToObject<List<PickResult>>();
             foreach (var r in results)
             {
@@ -163,6 +164,10 @@ public class TubeTable : MonoBehaviour
         Picked = true;
         WsClient.I.Send("room.pick", new { slot });
     }
+
+    void StartSuspense() { StopSuspense(); suspense = StartCoroutine(SuspensePulse()); }
+    void StopSuspense() { if (suspense != null) { StopCoroutine(suspense); suspense = null; } }
+    IEnumerator SuspensePulse() { float t=0; while(true) { t += Time.deltaTime; float s=Mathf.Sin(t*7f)*0.025f; if(tableCam) tableCam.localPosition += new Vector3(0,s,0); yield return null; } }
 
     void Update()
     {

@@ -158,6 +158,15 @@ public static class NecpraSceneBuilder
         var sys = new GameObject("Systems");
         var world = sys.AddComponent<WorldClient>(); var tt = sys.AddComponent<TubeTable>();
         var ui = sys.AddComponent<GameUI>(); var boot = sys.AddComponent<GameBootstrap>();
+        var director = sys.AddComponent<NecpraWorldDirector>();
+        var npcs = sys.AddComponent<HotelNpcDirector>();
+        var cinematic = sys.AddComponent<NecpraCinematicCamera>();
+        var graphics = sys.AddComponent<NecpraGraphicsSettings>();
+        var audio = sys.AddComponent<NecpraAudioDirector>();
+        var games = sys.AddComponent<NecpraMiniGameCatalog>();
+        cinematic.targetCamera = cam; cinematic.lobby = Point("WideCamera", new Vector3(0, 7.5f, -16f), sys.transform);
+        cinematic.table = tableCam; cinematic.close = closeCam;
+
         world.player = lp; lp.table = tt;
         tt.tubes = tubes; tt.slotPoints = slots; tt.ball = ball.transform; tt.seats = seatT;
         tt.tableCam = tableCam; tt.closeCam = closeCam; tt.cam = cam; tt.world = world;
