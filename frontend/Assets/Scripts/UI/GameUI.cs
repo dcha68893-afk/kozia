@@ -11,7 +11,7 @@ public class GameUI : MonoBehaviour
     public WorldClient world;
     public TubeTable table;
 
-    enum Panel { None, Shop, Rooms, Friends, Board, Tourney, Customize }
+    enum Panel { None, Shop, Rooms, Friends, Board, Tourney, Customize, Games, Settings }
     Panel panel = Panel.None;
 
     string fLogin = "", fUser = "", fEmail = "", fPass = "", chatInput = "", joinCode = "", friendName = "", toast = "", invite = "";
@@ -25,6 +25,11 @@ public class GameUI : MonoBehaviour
     List<TournamentDto> tourneys = new List<TournamentDto>();
     List<RoomListEntry> rooms = new List<RoomListEntry>();
     string boardType = "global";
+    NecpraGraphicsSettings graphics;
+    NecpraCinematicCamera cinematic;
+    NecpraAudioDirector audio;
+    bool fullscreen = true;
+    float uiScale = 1f;
     Appearance edit;
 
     static readonly string[] Skins = { "#f1c9a5", "#e0b08c", "#c68642", "#8d5524", "#5c3a21", "#ffdbac" };
@@ -32,6 +37,10 @@ public class GameUI : MonoBehaviour
 
     void Start()
     {
+        graphics = FindFirstObjectByType<NecpraGraphicsSettings>();
+        cinematic = FindFirstObjectByType<NecpraCinematicCamera>();
+        audio = FindFirstObjectByType<NecpraAudioDirector>();
+        fullscreen = Screen.fullScreen;
         var ws = WsClient.I;
         ws.On("room.list", d => rooms = d["rooms"].ToObject<List<RoomListEntry>>());
         ws.On("error", d => Toast((string)d["message"]));
@@ -53,6 +62,7 @@ public class GameUI : MonoBehaviour
     {
         panel = panel == p ? Panel.None : p;
         scroll = Vector2.zero;
+        if (audio) audio.Click();
         switch (panel)
         {
             case Panel.Shop: Run(async () => shop = await ApiClient.ShopItems()); break;
@@ -136,7 +146,8 @@ public class GameUI : MonoBehaviour
             GUI.enabled = true;
         }
         GUILayout.Space(20);
-        if (GUILayout.Button("Games", GUILayout.Width(80))) Open(Panel.Rooms);
+        if (GUILayout.Button("Games", GUILayout.Width(80))) Open(Panel.Games);
+        if (GUILayout.Button("Settings", GUILayout.Width(85))) Open(Panel.Settings);
         if (GUILayout.Button("Shop", GUILayout.Width(70))) Open(Panel.Shop);
         if (GUILayout.Button("Style", GUILayout.Width(70))) Open(Panel.Customize);
         if (GUILayout.Button("Friends", GUILayout.Width(80))) Open(Panel.Friends);
@@ -157,6 +168,8 @@ public class GameUI : MonoBehaviour
                 case Panel.Board: DrawBoard(); break;
                 case Panel.Tourney: DrawTourney(); break;
                 case Panel.Customize: DrawCustomize(); break;
+                case Panel.Games: DrawGames(); break;
+                case Panel.Settings: DrawSettings(); break;
             }
             GUILayout.EndScrollView();
             GUILayout.EndArea();
@@ -298,6 +311,63 @@ public class GameUI : MonoBehaviour
             GUI.enabled = true;
             GUILayout.EndHorizontal();
         }
+    }
+
+    void DrawGames()
+    {
+        GUILayout.Label("<b>NECPRA GAME HALL</b>  •  Competitive social games");
+        GUILayout.Label("Choose a mode. Tube Challenge is the live multiplayer vertical slice; the other modes are catalogued for their production gameplay modules.");
+        GUILayout.Space(8);
+        var names = NecpraMiniGameCatalog.Names;
+        for (int i = 0; i < names.Length; i++)
+        {
+            GUILayout.BeginHorizontal(GUI.skin.box);
+            GUILayout.Label((i + 1).ToString("00") + "  " + names[i]);
+            GUILayout.FlexibleSpace();
+            if (i == 0)
+            {
+                if (GUILayout.Button("Find room", GUILayout.Width(110))) { Open(Panel.Rooms); }
+            }
+            else
+            {
+                GUI.enabled = false; GUILayout.Button("Coming next", GUILayout.Width(110)); GUI.enabled = true;
+            }
+            GUILayout.EndHorizontal();
+        }
+    }
+
+    void DrawSettings()
+    {
+        GUILayout.Label("<b>GRAPHICS & PRESENTATION</b>");
+        if (graphics != null)
+        {
+            GUILayout.BeginHorizontal();
+            foreach (NecpraGraphicsSettings.Preset p in Enum.GetValues(typeof(NecpraGraphicsSettings.Preset)))
+            {
+                if (GUILayout.Button(p.ToString(), GUILayout.Width(105))) { graphics.Apply(p); Toast(p + " quality applied"); }
+            }
+            GUILayout.EndHorizontal();
+        }
+        GUILayout.Label("Target resolution: " + Screen.width + " × " + Screen.height);
+        if (GUILayout.Button(fullscreen ? "Windowed mode" : "Fullscreen mode", GUILayout.Height(36)))
+        {
+            fullscreen = !fullscreen; Screen.fullScreen = fullscreen;
+        }
+        GUILayout.Space(12);
+        GUILayout.Label("<b>CINEMATIC CAMERA</b>");
+        if (cinematic != null)
+        {
+            GUILayout.BeginHorizontal();
+            foreach (NecpraCinematicCamera.Mode m in Enum.GetValues(typeof(NecpraCinematicCamera.Mode)))
+                if (GUILayout.Button(m.ToString(), GUILayout.Width(105))) cinematic.mode = m;
+            GUILayout.EndHorizontal();
+        }
+        GUILayout.Space(12);
+        GUILayout.Label("<b>PERFORMANCE</b>");
+        GUILayout.Label("60 FPS is the default target. Low quality is intended for older phones; Ultra is intended for capable desktop/mobile hardware.");
+        GUILayout.Label("UI scale " + uiScale.ToString("0.00"));
+        uiScale = GUILayout.HorizontalSlider(uiScale, 0.85f, 1.20f);
+        GUILayout.Label("Tip: use Low/Medium before enabling high-resolution shadows on mobile.");
     }
 
     void DrawCustomize()

@@ -27,9 +27,19 @@ async function main() {
   app.use(cors({ origin: config.corsOrigins.includes('*') ? true : config.corsOrigins }));
   app.use(express.json({ limit: '20kb' }));
 
+  const startedAt = Date.now();
   app.get('/health', async (_req, res) => {
-    try { await pool.query('SELECT 1'); res.json({ ok: true }); }
-    catch { res.status(503).json({ ok: false }); }
+    try {
+      await pool.query('SELECT 1');
+      res.json({ ok: true, service: 'necpra-world', version: '1.0.0', uptimeSec: Math.floor((Date.now() - startedAt) / 1000) });
+    } catch {
+      res.status(503).json({ ok: false, service: 'necpra-world' });
+    }
+  });
+
+  app.get('/ready', async (_req, res) => {
+    try { await pool.query('SELECT 1'); res.json({ ready: true }); }
+    catch { res.status(503).json({ ready: false }); }
   });
 
   app.use('/api', rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: true, legacyHeaders: false }));
