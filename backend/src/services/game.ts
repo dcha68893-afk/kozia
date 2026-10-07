@@ -4,7 +4,7 @@ import { checkAchievements, levelFromXp } from './progression';
 
 const TODAY = `(date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`;
 
-async function earnedToday(c: any, userId: string): Promise<number> {
+export async function earnedToday(c: any, userId: string): Promise<number> {
   const r = await c.query(
     `SELECT COALESCE(SUM(coins),0)::int AS s FROM game_results WHERE user_id=$1 AND created_at >= ${TODAY}`,
     [userId],

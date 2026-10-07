@@ -9,7 +9,7 @@ import { levelFromXp, stageForLevel } from '../services/progression';
 import { cleanText } from '../util';
 import { Conn, conns, send, sendTo } from './presence';
 import { createRoom, joinRoom, leaveCurrent, listPublic, roomOf } from './rooms';
-import { createMatch, joinMatch, leaveMatch, matchOf } from './minigames';
+import { createMatch, joinMatch, leaveMatch, matchOf, rematch } from './minigames';
 import { setUserMatch, clearUserMatch } from './redisState';
 
 export const ZONES: Record<string, { cx: number; cz: number; r: number }> = {
@@ -155,6 +155,12 @@ async function handle(c: Conn, t: string, d: any) {
     case 'game.match.start': { const m=matchOf(c.userId); if(!m) throw new Error('Not in a match'); return m.start(c.userId); }
     case 'game.match.action': { const m=matchOf(c.userId); if(!m) throw new Error('Not in a match'); return m.action(c.userId,String(d?.action ?? ''),d?.payload ?? {}); }
     case 'game.match.finish': { throw new Error('Match results are settled by the server'); }
+    case 'game.match.rematch': {
+      leaveCurrent(c.userId); const r=rematch({userId:c.userId,username:c.username});
+      await setUserMatch(c.userId,r.match.state.id);
+      for(const u of r.targets) sendTo(u,'game.match.rematch',{code:r.match.state.code,gameId:r.match.state.gameId,from:r.from});
+      return send(c,'game.match.joined',r.match.snapshot());
+    }
     case 'game.match.leave': { leaveMatch(c.userId); await clearUserMatch(c.userId); return send(c,'game.match.left'); }
     case 'room.invite': {
       const r = roomOf(c.userId);
@@ -190,7 +196,9 @@ async function onConnection(ws: WebSocket, token: string | null) {
 
   const room = roomOf(user.id);
   if (room) room.reconnect(user.id);
-  send(c, 'hello', { user: self, inRoom: !!room });
+  const mt = matchOf(user.id);
+  send(c, 'hello', { user: self, inRoom: !!room, inMatch: !!mt });
+  if (mt) mt.reconnect(user.id);
 
   ws.on('pong', () => { c.alive = true; });
   ws.on('message', async (raw) => {

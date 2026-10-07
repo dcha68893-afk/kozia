@@ -26,6 +26,7 @@ export const config = {
   bannedWords: (process.env.BANNED_WORDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   allowSoloRooms: bool('ALLOW_SOLO_ROOMS'),
   dailyCoinCap: num('DAILY_COIN_CAP', 3000),
+  matchGraceMs: num('MATCH_GRACE_MS', 30000),
   tubeRounds: num('TUBE_ROUNDS', 5),
   winCoins: 50,
   winXp: 25,

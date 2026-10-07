@@ -30,6 +30,8 @@ export async function migrate(): Promise<void> {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   await pool.query(sql);
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject TEXT UNIQUE');
+  await pool.query('ALTER TABLE game_results ADD COLUMN IF NOT EXISTS rank INT');
+  await pool.query('ALTER TABLE game_results ADD COLUMN IF NOT EXISTS score INT');
   for (const s of SEEDS) {
     await pool.query(
       `INSERT INTO items(id,name,category,price_coins,price_gems,min_level,data)

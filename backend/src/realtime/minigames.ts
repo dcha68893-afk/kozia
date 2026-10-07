@@ -1,8 +1,9 @@
 import { randomUUID, createHash } from 'crypto';
 import { config } from '../config';
-import { GAME_RULES, GameId, validGame } from '../game/minigames';
+import { GAME_RULES, GameId, validGame, rewardFor, matchLimitMs } from '../game/minigames';
 import { pool } from '../db/pool';
 import { checkAchievements } from '../services/progression';
+import { earnedToday } from '../services/game';
 import { sendTo } from './presence';
 import { applyCompetitiveAction, createCompetitiveState, CompetitiveKind, EngineState } from '../game/competitiveGames';
 import { saveMatchState } from './redisState';
@@ -25,7 +26,7 @@ function publicGame(g:any){if(g?.kind==='memory'){const visible=new Array(16).fi
 function canPlace(board:boolean[][],p:number[][]){for(let x=0;x<8;x++)for(let y=0;y<8;y++)if(p.every(([dx,dy])=>x+dx<8&&y+dy<8&&!board[x+dx][y+dy]))return true;return false;}
 
 class Match{
- readonly state:MatchState; private timer:any=null; private privateGames=new Map<string,any>(); private competitive:EngineState|null=null;
+ readonly state:MatchState; private timer:any=null; private graceTimers=new Map<string,any>(); private privateGames=new Map<string,any>(); private competitive:EngineState|null=null;
  constructor(readonly onClose:(m:Match)=>void,gameId:GameId,host:{userId:string;username:string}){
   this.state={id:randomUUID(),code:makeCode(),gameId,hostId:host.userId,status:'lobby',sequence:0,players:[this.player(host.userId,host.username)],startedAt:null,finishedAt:null,game:gameFor(gameId)};
  }
@@ -44,7 +45,7 @@ class Match{
   for(const p of this.state.players)this.privateGames.set(p.userId,gameFor(this.state.gameId));
   if(this.state.gameId==='reaction'){const g=this.state.game;g.targetDelayMs=1200+Math.floor(Math.random()*2300);g.targetAt=Date.now()+g.targetDelayMs;}
   if(['trivers','crossword','chess','racing','team-strategy'].includes(this.state.gameId))this.competitive=createCompetitiveState(this.state.gameId as CompetitiveKind,this.state.players.map(p=>p.userId));
-  this.broadcast('game.match.started',{match:this.snapshot(),serverNow:Date.now()});this.sync();this.persist();this.timer=setTimeout(()=>void this.finishInternal('timeout'),180000);}
+  this.broadcast('game.match.started',{match:this.snapshot(),serverNow:Date.now()});this.sync();this.persist();this.timer=setTimeout(()=>void this.finishInternal('timeout'),matchLimitMs(this.state.gameId));}
  private playerOf(u:string){const p=this.state.players.find(x=>x.userId===u);if(!p)throw new Error('Not in match');return p;}
  private guard(p:MatchPlayer){
  const now=Date.now();
@@ -66,14 +67,85 @@ private audit(p:MatchPlayer,reason:string,accepted:boolean,detail:string){
  private memory(p:MatchPlayer,a:any){if(this.state.gameId!=='memory')throw new Error('Wrong game');const g=this.game(p.userId),i=Number(a?.index);if(!Number.isInteger(i)||i<0||i>=16||g.matched.includes(i)||g.revealed.includes(i)||g.first===i)throw new Error('Invalid card');if(g.hideUntil&&Date.now()>=g.hideUntil){g.revealed=[];g.first=null;g.hideUntil=0;}g.revealed.push(i);let delta=0;if(g.first===null)g.first=i;else{const f=g.first;if(g.cards[f]===g.cards[i]){g.matched.push(f,i);g.revealed=[];g.first=null;delta=100;}else{delta=5;g.hideUntil=Date.now()+700;}}p.score+=delta;this.audit(p,'memory.flip',true,JSON.stringify({index:i}));this.result(p,'memory.flip',{index:i});if(g.matched.length===16){p.done=true;this.maybeFinish('completed');}if(g.hideUntil)setTimeout(()=>{if(this.state.status==='playing'&&g.hideUntil&&Date.now()>=g.hideUntil){g.revealed=[];g.first=null;g.hideUntil=0;this.state.sequence++;this.sendState(p.userId);}},720);}
  private reaction(p:MatchPlayer){if(this.state.gameId!=='reaction')throw new Error('Wrong game');const now=Date.now();if(now<this.state.game.targetAt)throw new Error('Too early');const ms=now-this.state.game.targetAt;p.score+=Math.max(1,1000-ms);p.done=true;this.audit(p,'reaction.click',true,JSON.stringify({reactionMs:ms}));this.result(p,'reaction.click',{reactionMs:ms});this.maybeFinish('completed');}
  private early(p:MatchPlayer){if(this.state.gameId!=='reaction')throw new Error('Wrong game');if(Date.now()>=this.state.game.targetAt)throw new Error('Use reaction.click');p.done=true;p.score=0;this.audit(p,'reaction.early',true,'early');this.result(p,'reaction.early',{});this.maybeFinish('completed');}
- private maybeFinish(reason:string){if(this.state.players.filter(p=>p.connected).length<2)return;if(this.state.players.filter(p=>p.connected).every(p=>p.done))void this.finishInternal(reason);}
- async finishInternal(reason:string){if(this.state.status!=='playing')return;this.state.status='finished';this.state.finishedAt=Date.now();if(this.timer)clearTimeout(this.timer);const ranked=[...this.state.players].sort((a,b)=>b.score-a.score),c=await pool.connect();try{await c.query('BEGIN');for(let i=0;i<ranked.length;i++){const p=ranked[i],won=i===0&&p.score>0,coins=won?100:25,xp=won?50:15;await c.query('INSERT INTO game_results(room_id,user_id,round_no,kind,won,coins,xp) VALUES($1,$2,1,$3,$4,$5,$6) ON CONFLICT(room_id,user_id,round_no,kind) DO NOTHING',[this.state.id,p.userId,this.state.gameId,won,coins,xp]);await c.query('UPDATE users SET coins=coins+$2,xp=xp+$3,games=games+1,wins=wins+$4,streak=CASE WHEN $4=1 THEN streak+1 ELSE 0 END,best_streak=GREATEST(best_streak,CASE WHEN $4=1 THEN streak+1 ELSE 0 END) WHERE id=$1',[p.userId,coins,xp,won?1:0]);await checkAchievements(c,p.userId);}await c.query('COMMIT');}catch(e){await c.query('ROLLBACK');throw e}finally{c.release();}this.broadcast('game.match.finished',{match:this.snapshot(),reason,results:ranked.map((p,i)=>({userId:p.userId,username:p.username,rank:i+1,score:p.score,won:i===0&&p.score>0,coins:i===0&&p.score>0?100:25,xp:i===0&&p.score>0?50:15}))});this.persist();setTimeout(()=>this.onClose(this),60000);}
- disconnect(u:string){const p=this.state.players.find(x=>x.userId===u);if(p)p.connected=false;if(this.state.status==='lobby'&&this.state.hostId===u){const n=this.state.players.find(x=>x.connected);if(n)this.state.hostId=n.userId;}this.broadcast('game.match.update',this.snapshot());if(this.state.status==='playing'&&this.state.players.filter(x=>x.connected).length<2)void this.finishInternal('disconnect');}
+ private maybeFinish(reason:string){if(this.state.status!=='playing')return;if(this.state.players.every(p=>p.done))void this.finishInternal(reason);}
+ async finishInternal(reason:string){
+  if(this.state.status!=='playing')return;
+  this.state.status='finished';this.state.finishedAt=Date.now();
+  if(this.timer)clearTimeout(this.timer);
+  for(const t of this.graceTimers.values())clearTimeout(t);this.graceTimers.clear();
+  const sorted=[...this.state.players].sort((a,b)=>b.score-a.score);
+  let rk=0,prev:number|null=null;
+  const ranked=sorted.map((p,i)=>{if(prev===null||p.score!==prev){rk=i+1;prev=p.score;}return{p,rank:rk};});
+  const results:any[]=[];
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   for(const{p,rank}of ranked){
+    const won=rank===1&&p.score>0,r=rewardFor(rank,won);
+    const cap=Math.max(0,config.dailyCoinCap-(await earnedToday(c,p.userId)));
+    const coins=Math.min(r.coins,cap),xp=r.xp;
+    const ins=await c.query('INSERT INTO game_results(room_id,user_id,round_no,kind,won,coins,xp,rank,score) VALUES($1,$2,1,$3,$4,$5,$6,$7,$8) ON CONFLICT(room_id,user_id,round_no,kind) DO NOTHING',[this.state.id,p.userId,this.state.gameId,won,coins,xp,rank,p.score]);
+    if(ins.rowCount){
+     await c.query('UPDATE users SET coins=coins+$2,xp=xp+$3,games=games+1,wins=wins+$4,streak=CASE WHEN $5 THEN streak+1 ELSE 0 END,best_streak=GREATEST(best_streak,CASE WHEN $5 THEN streak+1 ELSE 0 END) WHERE id=$1',[p.userId,coins,xp,won?1:0,won]);
+     await checkAchievements(c,p.userId);
+    }
+    results.push({userId:p.userId,username:p.username,rank,score:p.score,won,coins,xp});
+   }
+   await c.query('COMMIT');
+  }catch(e){await c.query('ROLLBACK');this.state.status='playing';throw e}finally{c.release();}
+  this.lastResults=results;
+  this.broadcast('game.match.finished',{match:this.snapshot(),reason,results});
+  releasePlayers(this);
+  this.persist();setTimeout(()=>this.onClose(this),600000);
+ }
+ public lastResults:any[]=[];
+ reconnect(u:string){
+  const p=this.state.players.find(x=>x.userId===u);if(!p)return;
+  p.connected=true;const t=this.graceTimers.get(u);if(t){clearTimeout(t);this.graceTimers.delete(u);}
+  sendTo(u,'game.match.joined',this.snapshot(u));
+  if(this.state.status==='playing')this.sendState(u);
+  if(this.state.status==='finished')sendTo(u,'game.match.finished',{match:this.snapshot(u),reason:'finished',results:this.lastResults});
+  this.broadcast('game.match.update',this.snapshot());
+ }
+ removePlayer(u:string){
+  this.state.players=this.state.players.filter(x=>x.userId!==u);
+  if(this.state.hostId===u){const n=this.state.players.find(x=>x.connected)||this.state.players[0];if(n)this.state.hostId=n.userId;}
+  this.broadcast('game.match.update',this.snapshot());
+  if(!this.state.players.length||(this.state.status==='lobby'&&!this.state.players.some(x=>x.connected)))this.onClose(this);
+ }
+ disconnect(u:string){
+  const p=this.state.players.find(x=>x.userId===u);if(!p)return;
+  p.connected=false;
+  if(this.state.status==='lobby'&&this.state.hostId===u){const n=this.state.players.find(x=>x.connected);if(n)this.state.hostId=n.userId;}
+  this.broadcast('game.match.update',this.snapshot());
+  if(this.state.status==='finished')return;
+  const old=this.graceTimers.get(u);if(old)clearTimeout(old);
+  this.graceTimers.set(u,setTimeout(()=>{
+   this.graceTimers.delete(u);
+   const q=this.state.players.find(x=>x.userId===u);if(!q||q.connected)return;
+   if(this.state.status==='lobby'){releaseUser(u);this.removePlayer(u);return;}
+   if(this.state.status==='playing'){
+    q.done=true;this.audit(q,'forfeit',true,'Disconnected past grace period');
+    if(this.state.players.filter(x=>x.connected&&!x.done).length===0||this.state.players.filter(x=>x.connected).length<2)void this.finishInternal('disconnect');
+    else {this.broadcast('game.match.update',this.snapshot());this.maybeFinish('completed');}
+   }
+  },config.matchGraceMs));
+ }
  private persist(){void saveMatchState(this.state.id,this.state);}
 }
 const matches=new Map<string,Match>(),byCode=new Map<string,Match>(),userMatch=new Map<string,Match>();
-function remove(m:Match){matches.delete(m.state.id);byCode.delete(m.state.code);codes.delete(m.state.code);for(const[u,x]of userMatch)if(x===m)userMatch.delete(u);}
+function remove(m:Match){matches.delete(m.state.id);byCode.delete(m.state.code);codes.delete(m.state.code);for(const[u,x]of userMatch)if(x===m)userMatch.delete(u);for(const[u,x]of lastMatch)if(x===m)lastMatch.delete(u);}
+const lastMatch=new Map<string,Match>();
+function releaseUser(u:string){userMatch.delete(u);}
+function releasePlayers(m:Match){for(const p of m.state.players){if(userMatch.get(p.userId)===m){userMatch.delete(p.userId);lastMatch.set(p.userId,m);}}}
 export const matchOf=(u:string)=>userMatch.get(u);
+export function rematch(host:{userId:string;username:string}){
+ const prev=lastMatch.get(host.userId);if(!prev||prev.state.status!=='finished')throw new Error('No finished match to replay');
+ if(userMatch.has(host.userId))throw new Error('Already in a match');
+ const m=createMatch(host,prev.state.gameId);
+ const targets=prev.state.players.filter(p=>p.userId!==host.userId).map(p=>p.userId);
+ return{match:m,targets,from:host.username};
+}
 export function createMatch(host:{userId:string;username:string},id:string){if(!validGame(id)||id==='tube')throw new Error('Game is not available in the competitive match engine');if(userMatch.has(host.userId))throw new Error('Already in a match');const m=new Match(remove,id as GameId,host);matches.set(m.state.id,m);byCode.set(m.state.code,m);userMatch.set(host.userId,m);return m;}
 export function joinMatch(p:{userId:string;username:string},codeValue:string){if(userMatch.has(p.userId))throw new Error('Already in a match');const m=byCode.get(codeValue.toUpperCase());if(!m)throw new Error('Match not found');m.join(p);userMatch.set(p.userId,m);return m;}
-export function leaveMatch(u:string){const m=userMatch.get(u);if(!m)return;userMatch.delete(u);m.disconnect(u);}
+export function leaveMatch(u:string){const m=userMatch.get(u);if(!m)return;userMatch.delete(u);if(m.state.status==='lobby')m.removePlayer(u);else m.disconnect(u);}

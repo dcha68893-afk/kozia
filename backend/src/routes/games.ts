@@ -1,3 +1,4 @@
+import { pool } from '../db/pool';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
@@ -23,6 +24,16 @@ const actionSchema=z.object({
   gameId:z.string().min(1).max(32),
   action:z.string().min(1).max(32),
   payload:z.record(z.unknown()).default({})
+});
+
+gamesRouter.get('/history', requireAuth, async (req,res,next)=>{
+  try {
+    const mine=await pool.query(`SELECT room_id,kind,won,coins,xp,rank,score,created_at FROM game_results WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30`,[req.user!.id]);
+    const ids=mine.rows.map((r:any)=>r.room_id);
+    const others=ids.length?await pool.query(`SELECT g.room_id,u.username,g.rank,g.score FROM game_results g JOIN users u ON u.id=g.user_id WHERE g.room_id=ANY($1) ORDER BY g.rank NULLS LAST`,[ids]):{rows:[]};
+    const by:Record<string,any[]>={};for(const o of others.rows)(by[o.room_id]??=[]).push({username:o.username,rank:o.rank,score:o.score});
+    res.json({history:mine.rows.map((r:any)=>({matchId:r.room_id,game:r.kind,won:r.won,rank:r.rank,score:r.score,coins:r.coins,xp:r.xp,playedAt:r.created_at,players:by[r.room_id]??[]}))});
+  } catch(e){ next(e); }
 });
 
 gamesRouter.post('/validate-action', requireAuth, async (req,res,next)=>{
